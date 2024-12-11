@@ -5,6 +5,8 @@ import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 public class PrestamoDAO {
@@ -57,5 +59,30 @@ public class PrestamoDAO {
             e.printStackTrace();
         }
     }
+
+    public List<Object[]> rankingUsuariosPorLibrosLeidos(int anios) {
+        try (Session session = sessionFactory.openSession()) {
+            String hql = """
+            SELECT u.nombreCompleto, COUNT(p.id) AS librosLeidos
+            FROM Prestamo p
+            JOIN p.usuario u
+            WHERE p.estado = 'FINALIZADO' AND p.fechaDevolucionReal >= :fechaLimite
+            GROUP BY u.nombreCompleto
+            ORDER BY librosLeidos DESC
+        """;
+
+            LocalDate fechaLimite = LocalDate.now().minusYears(anios);
+
+            return session.createQuery(hql, Object[].class)
+                    .setParameter("fechaLimite", java.sql.Date.valueOf(fechaLimite))
+                    .getResultList();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+
+
 
 }

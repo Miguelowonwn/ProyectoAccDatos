@@ -18,24 +18,29 @@ public class Prestamo {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "usuario_id", nullable = false)
+    @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
     @ManyToOne
-    @JoinColumn(name = "libro_id", nullable = false)
+    @JoinColumn(name = "libro_id")
+    @ToString.Exclude  // Evita bucles infinitos al imprimir
     private Libro libro;
+
 
     @Column(name = "fechaPrestamo", nullable = false)
     private Date fechaPrestamo;
 
-    @Column(name = "fechaDevolucion", nullable = false)
+    @Column(name = "fechaDevolucion")
     private Date fechaDevolucion;
 
     @Column(name = "fechaDevolucionReal")
     private Date fechaDevolucionReal;
 
+    @Column(name = "estado")
     @Enumerated(EnumType.STRING)
-    @Column(name = "estado", nullable = false)
     private EstadoPrestamo estado;
+
+    // Getters, setters y constructores
 }
+
 

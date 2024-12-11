@@ -1,6 +1,7 @@
 package dao;
 
 import com.example.biblioteca.entity.Libro;
+import org.hibernate.Hibernate;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -34,15 +35,27 @@ public class LibroDAO {
 
     public Libro findById(Long id) {
         try (Session session = sessionFactory.openSession()) {
-            return session.find(Libro.class, id);
+            return session.get(Libro.class, id);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
+
     public List<Libro> findAll() {
         try (Session session = sessionFactory.openSession()) {
-            return session.createQuery("FROM Libro", Libro.class).list();
+            List<Libro> libros = session.createQuery("FROM Libro", Libro.class).list();
+
+            libros.forEach(libro -> {
+                Hibernate.initialize(libro.getAutores());
+                Hibernate.initialize(libro.getPrestamos());
+            });
+
+            return libros;
         }
     }
+
 
     public void update(Libro libro) {
         Transaction transaction = null;
@@ -69,52 +82,50 @@ public class LibroDAO {
     }
 
     public List<Object[]> librosMasPrestados() {
-        List<Object[]> resultado = new ArrayList<>();
-
         try (Session session = sessionFactory.openSession()) {
             String hql = """
-        SELECT l.titulo, a.nombreCompleto, COUNT(p.id)
-        FROM Prestamo p
-        JOIN p.libro l
-        JOIN l.autores a
-        WHERE p.fechaPrestamo BETWEEN :fechaInicio AND :fechaFin
-        GROUP BY l.titulo, a.nombreCompleto
-        ORDER BY COUNT(p.id) DESC
+            SELECT l.titulo, a.nombreCompleto, COUNT(p.id) AS totalPrestamos
+            FROM Prestamo p
+            JOIN p.libro l
+            JOIN l.autores a
+            WHERE p.fechaPrestamo BETWEEN :fechaInicio AND :fechaFin
+            GROUP BY l.titulo, a.nombreCompleto
+            ORDER BY totalPrestamos DESC
         """;
 
             Query<Object[]> query = session.createQuery(hql, Object[].class);
 
-            // Calcular fechas para los últimos 12 meses
+            // Calcular fechas para el último año
             LocalDate fechaFin = LocalDate.now();
             LocalDate fechaInicio = fechaFin.minusMonths(12);
 
-            // Convertir fechas a java.sql.Date
+            // Pasar fechas como parámetros
             query.setParameter("fechaInicio", java.sql.Date.valueOf(fechaInicio));
             query.setParameter("fechaFin", java.sql.Date.valueOf(fechaFin));
 
-            resultado = query.list();
+            return query.list();
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Error al obtener los libros más prestados: " + e.getMessage());
+            return new ArrayList<>();
         }
-
-        return resultado;
     }
 
+
     public List<Libro> librosNoPrestadosUltimos6Meses() {
-        String query = """
-            SELECT l
-            FROM Libro l
-            WHERE NOT EXISTS (
-                SELECT p
-                FROM Prestamo p
-                WHERE p.libro = l AND p.fechaPrestamo >= :fechaLimite
-            )
-            """;
+        String hql = """
+        SELECT l
+        FROM Libro l
+        WHERE l.id NOT IN (
+            SELECT DISTINCT p.libro.id
+            FROM Prestamo p
+            WHERE p.fechaPrestamo >= :fechaLimite
+        )
+    """;
 
         LocalDate fechaLimite = LocalDate.now().minusMonths(6);
 
         try (Session session = sessionFactory.openSession()) {
-            return session.createQuery(query, Libro.class)
+            return session.createQuery(hql, Libro.class)
                     .setParameter("fechaLimite", Date.valueOf(fechaLimite))
                     .getResultList();
         } catch (Exception e) {
@@ -123,6 +134,22 @@ public class LibroDAO {
         }
     }
 
+
+    public List<Object[]> titulosPorCategoria() {
+        try (Session session = sessionFactory.openSession()) {
+            String hql = """
+            SELECT l.categoria, COUNT(l.id) AS totalTitulos
+            FROM Libro l
+            GROUP BY l.categoria
+            ORDER BY totalTitulos DESC
+        """;
+
+            return session.createQuery(hql, Object[].class).getResultList();
+        } catch (Exception e) {
+            System.out.println("Error al obtener el conteo de títulos por categoría: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
 
 
 

@@ -8,6 +8,7 @@ import org.hibernate.query.Query;
 
 import java.sql.Date;  // Asegúrate de importar java.sql.Date
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -75,22 +76,46 @@ public class AutorDAO {
         return resultados;
     }
 
-    public List<Autor> autoresConBajoPromedioDeCopias() {
-        String query = """
-        SELECT a
-        FROM Autor a
-        JOIN a.libros l
-        WHERE (l.copiasDisponibles * 1.0 / l.copiasTotales) < 0.2
-        GROUP BY a
-    """;
-
+    public List<Object[]> librosPorAutorOrdenadosPorPopularidad() {
         try (Session session = sessionFactory.openSession()) {
-            return session.createQuery(query, Autor.class).getResultList();
+            String hql = """
+            SELECT a.nombreCompleto, 
+                   l.titulo,
+                   COUNT(p.id) AS vecesPrestado, 
+                   SUM(l.copiasDisponibles) AS copiasDisponibles
+            FROM Autor a
+            JOIN a.libros l
+            LEFT JOIN l.prestamos p
+            GROUP BY a.id, a.nombreCompleto, l.titulo
+        """;
+
+
+
+            return session.createQuery(hql, Object[].class).getResultList();
         } catch (Exception e) {
-            System.out.println("Error al obtener autores con libros con bajo promedio de copias disponibles: " + e.getMessage());
-            return Collections.emptyList();
+            e.printStackTrace();
+            return new ArrayList<>();
         }
     }
 
+
+
+    public List<Object[]> autoresConBajoPromedioDeCopias() {
+        try (Session session = sessionFactory.openSession()) {
+            String hql = """
+            SELECT a.nombreCompleto, AVG(l.copiasDisponibles * 1.0 / l.copiasTotales) AS promedioDisponibles
+            FROM Autor a
+            JOIN a.libros l
+            WHERE l.copiasTotales > 0
+            GROUP BY a.id, a.nombreCompleto
+            HAVING promedioDisponibles < 0.2
+        """;
+
+            return session.createQuery(hql, Object[].class).getResultList();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
 
 }

@@ -30,8 +30,10 @@ public class Autor {
             joinColumns = @JoinColumn(name = "autor_id"),
             inverseJoinColumns = @JoinColumn(name = "libro_id")
     )
-    @ToString.Exclude // Evita bucles infinitos al imprimir
+    @ToString.Exclude  // Ya configurado
     private List<Libro> libros;
+
+
 
 }
 

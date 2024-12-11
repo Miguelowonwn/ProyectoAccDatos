@@ -13,8 +13,10 @@ import java.sql.Date;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
+import java.util.Set;
 
 public class Main {
     private static SessionFactory sessionFactory;
@@ -23,7 +25,18 @@ public class Main {
     private static PrestamoDAO prestamoDAO;
     private static AutorDAO autorDAO;
 
+    private static HashSet<String> categoriasLibros = new HashSet<>();
+
     public static void main(String[] args) {
+        categoriasLibros.add("Ciencia");
+        categoriasLibros.add("Distopía");
+        categoriasLibros.add("Educación");
+        categoriasLibros.add("Fantasía");
+        categoriasLibros.add("Ficción");
+        categoriasLibros.add("Historia");
+        categoriasLibros.add("No ficción");
+        categoriasLibros.add("Poesía");
+
         sessionFactory = new Configuration()
                 .configure("hibernate.cfg.xml")
                 .addAnnotatedClass(Usuario.class)
@@ -165,10 +178,15 @@ public class Main {
                 scanner.next();  // Limpiar el buffer del scanner
             }
         }
+        String categoria;
+        while (true) {
+            System.out.print("Ingrese la categoria del libro: ");
+            categoria = scanner.nextLine();
+            if(categoriasLibros.contains(categoria)) {
+                break;
+            }
+        }
 
-        System.out.print("Ingrese la categoria del libro: ");
-        String categoria = scanner.nextLine();
-        scanner.next();
         System.out.print("Ingrese las copias disponibles del libro: ");
         int copias = scanner.nextInt();
 
@@ -193,6 +211,7 @@ public class Main {
         Long usuarioId = scanner.nextLong();
         System.out.print("Ingrese el ID del libro: ");
         Long libroId = scanner.nextLong();
+        scanner.nextLine();
         do {
             System.out.print("Ingrese la fecha de terminación del préstamo (DD-MM-AAAA): ");
             String entrada = scanner.nextLine();
@@ -210,11 +229,23 @@ public class Main {
             Usuario usuario = usuarioDAO.findById(usuarioId);
             Libro libro = libroDAO.findById(libroId);
 
+            if (usuario == null) {
+                System.out.println("Usuario no encontrado con ID: " + usuarioId);
+                return;
+            }
+
+            if (libro == null) {
+                System.out.println("Libro no encontrado con ID: " + libroId);
+                return;
+            }
+
+            // Verifica si el usuario está suspendido
             if (usuario.getEstado() == EstadoUsuario.SUSPENDIDO) {
                 System.out.println("El usuario está suspendido y no puede realizar préstamos.");
                 return;
             }
 
+            // Verifica el número de multas
             if (usuario.getNumeroDeMultas() > 3) {
                 usuario.setEstado(EstadoUsuario.SUSPENDIDO);
                 usuarioDAO.update(usuario);
@@ -222,6 +253,7 @@ public class Main {
                 return;
             }
 
+            // Verifica la disponibilidad de copias
             if (libro.getCopiasDisponibles() <= 0) {
                 System.out.println("No hay copias disponibles del libro.");
                 return;
@@ -235,7 +267,9 @@ public class Main {
                     .fechaDevolucion(Date.valueOf(fecha))
                     .estado(EstadoPrestamo.EN_CURSO)
                     .build();
+            prestamoDAO.save(prestamo);
 
+            // Actualizar las copias disponibles
             libro.setCopiasDisponibles(libro.getCopiasDisponibles() - 1);
             libroDAO.update(libro);
 
@@ -243,6 +277,7 @@ public class Main {
         } catch (Exception e) {
             System.out.println("Error al realizar el préstamo: " + e.getMessage());
         }
+
     }
 
 
@@ -274,10 +309,13 @@ public class Main {
     private static void mostrarReportesYConsultas(Scanner scanner) {
         System.out.println("\n1. Libros más prestados en los últimos 12 meses");
         System.out.println("2. Libros no prestados en los últimos 6 meses");
-        System.out.println("3. Listar todos los autores cuyos libros se encuentran con un promedio de copias disponibles menor al 20%.");
+        System.out.println("3. Autores con libros con bajo promedio de copias disponibles");
         System.out.println("4. Consultar cuántos libros por categoría tiene la biblioteca, ordenados por la categoría con más ejemplares");
         System.out.println("5. Usuarios más activos");
-        System.out.println("6. Autores destacados");
+        System.out.println("6. Autores más prestados en el último año");
+        System.out.println("7. Libros más populares");
+        System.out.println("8. Ranking de usuarios por número de libros leídos en el último año");
+        System.out.println("0. Volver atrás");
         int opcion = scanner.nextInt();
 
         switch (opcion) {
@@ -296,7 +334,6 @@ public class Main {
                         // Imprimir el título, nombre del autor y el número de préstamos
                         System.out.printf("Título: %s, Autor: %s, Préstamos: %d%n", titulo, nombreCompleto, prestamos);
                     }
-
                 }
                 break;
 
@@ -312,21 +349,44 @@ public class Main {
                 }
                 break;
             case 3:
-                List<Autor> autoresBajoPromedio = autorDAO.autoresConBajoPromedioDeCopias();
+                System.out.println("\n==== Autores con libros con bajo promedio de copias disponibles ====");
+                List<Object[]> autoresBajoPromedio = autorDAO.autoresConBajoPromedioDeCopias();
+
                 if (autoresBajoPromedio.isEmpty()) {
-                    System.out.println("No hay autores con libros cuyo promedio de copias disponibles sea menor al 20%.");
+                    System.out.println("No hay autores cuyos libros tengan un promedio de copias disponibles menor al 20%.");
                 } else {
-                    System.out.println("\n==== Autores con libros con bajo promedio de copias disponibles ====");
-                    autoresBajoPromedio.forEach(autor -> {
-                        System.out.println("Autor: " + autor.getNombreCompleto());  // Se asume que "getNombre" es un método de la clase Autor
+                    System.out.printf("%-30s %-15s%n", "Autor", "Promedio Copias Disponibles");
+                    autoresBajoPromedio.forEach(fila -> {
+                        String nombreAutor = (String) fila[0];
+                        Double promedioDisponibles = (Double) fila[1];
+
+                        System.out.printf("%-30s %-15.2f%n", nombreAutor, promedioDisponibles);
                     });
                 }
                 break;
+
             case 4:
+                System.out.println("\n==== Libros por categoría ====");
+                List<Object[]> librosPorCategoria = libroDAO.titulosPorCategoria();
+
+                if (librosPorCategoria.isEmpty()) {
+                    System.out.println("No hay libros registrados en la biblioteca.");
+                } else {
+                    System.out.printf("%-30s %-15s%n", "Categoría", "Ejemplares");
+                    librosPorCategoria.forEach(fila -> {
+                        String categoria = (String) fila[0];
+                        Long totalEjemplares = (Long) fila[1];
+
+                        System.out.printf("%-30s %-15d%n", categoria, totalEjemplares);
+                    });
+                }
+                break;
+            case 5:
                 List<Object[]> usuariosActivos = usuarioDAO.usuariosMasActivos();
                 if (usuariosActivos.isEmpty()) {
                     System.out.println("No hay usuarios activos con datos suficientes.");
                 } else {
+                    System.out.println("\n==== Usuarios más activos ====");
                     usuariosActivos.forEach(usuario -> {
                         String nombre = (String) usuario[0];
                         Long totalPrestamos = (Long) usuario[1];
@@ -336,9 +396,10 @@ public class Main {
                     });
                 }
                 break;
-            case 5:
+            case 6:
                 List<Object[]> resultados = autorDAO.autoresDestacados();
                 if (resultados != null && !resultados.isEmpty()) {
+                    System.out.println("\n==== Autores con más libros prestados en el último año ====");
                     for (Object[] resultado : resultados) {
                         // El primer elemento es el nombre del autor (String)
                         String nombreAutor = (String) resultado[0];
@@ -352,7 +413,45 @@ public class Main {
                     System.out.println("No hay autores destacados.");
                 }
                 break;
+            case 7:
+                System.out.println("\n==== Listado de libros por autor ordenados por popularidad ====");
+                List<Object[]> librosPorAutor = autorDAO.librosPorAutorOrdenadosPorPopularidad();
 
+                if (librosPorAutor.isEmpty()) {
+                    System.out.println("No hay datos disponibles.");
+                } else {
+                    librosPorAutor.forEach(fila -> {
+                        String nombreAutor = (String) fila[0];
+                        String tituloLibro = (String) fila[1];
+                        Long vecesPrestado = (Long) fila[2];
+                        Long copiasDisponibles = (Long) fila[3];
+
+                        // Calcular el promedio disponible
+                        double promedioDisponibles = copiasDisponibles * 1.0 / (copiasDisponibles + vecesPrestado);
+
+                        System.out.printf("Autor: %s, Libro: %s, Veces Prestado: %d, Copias Disponibles: %d \n",
+                                nombreAutor, tituloLibro, vecesPrestado, copiasDisponibles);
+                    });
+                }
+                break;
+            case 8:
+                System.out.println("\n==== Ranking de usuarios por número de libros leídos en el último año ====");
+                List<Object[]> rankingUsuarios = prestamoDAO.rankingUsuariosPorLibrosLeidos(1);
+
+                if (rankingUsuarios.isEmpty()) {
+                    System.out.println("No hay datos disponibles.");
+                } else {
+                    System.out.printf("%-30s %-15s%n", "Usuario", "Libros Leídos");
+                    rankingUsuarios.forEach(fila -> {
+                        String nombreUsuario = (String) fila[0];
+                        Long librosLeidos = (Long) fila[1];
+
+                        System.out.printf("%-30s %-15d%n", nombreUsuario, librosLeidos);
+                    });
+                }
+                break;
+            case 0:
+                mostrarMenu();
             default:
                 System.out.println("Opción no válida.");
                 break;

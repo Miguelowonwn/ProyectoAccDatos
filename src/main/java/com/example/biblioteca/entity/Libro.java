@@ -1,6 +1,7 @@
 package com.example.biblioteca.entity;
 
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import javax.persistence.*;
 import java.util.List;
@@ -32,7 +33,12 @@ public class Libro {
     @Column(name = "copiasDisponibles", nullable = false)
     private Integer copiasDisponibles;
 
-    @ManyToMany(mappedBy = "libros", cascade = CascadeType.ALL)
-    @ToString.Exclude // Evita bucles infinitos al imprimir
+    @ManyToMany(mappedBy = "libros")
+    @ToString.Exclude  // Evita bucles infinitos al imprimir
     private List<Autor> autores;
+
+    @OneToMany(mappedBy = "libro", cascade = CascadeType.ALL)
+    @ToString.Exclude  // Evita bucles infinitos al imprimir
+    private List<Prestamo> prestamos;
+
 }
